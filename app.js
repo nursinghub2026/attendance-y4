@@ -759,7 +759,7 @@ function pgStudentsList() {
 }
 function pgStudent(name) {
   const me = normName(name), idx = (pgIndex().by.get(me) || new Map());
-  const list = [...sessionsList].sort(pgByDate), by = new Map();
+  const list = [...sessionsList].sort((a, b) => (parseSessionDate(a.sessionDate) || '').localeCompare(parseSessionDate(b.sessionDate) || '') || pgByDate(a, b)), by = new Map();
   let tp = 0, tt = 0, missing = 0;
   list.forEach(s => {
     if (!PGX.cache.has(s.id)) { missing++; return; }
@@ -776,7 +776,7 @@ function pgStudent(name) {
   by.forEach((l, course) => {
     const p = l.filter(x => x.rec).length;
     h += `<div class="mt-4 rounded-2xl border border-slate-200 bg-white overflow-hidden"><div class="flex items-center justify-between gap-2 px-3 py-3 bg-slate-50"><span class="font-display font-bold text-ink-900">${esc(course)}</span><span class="text-xs font-extrabold text-gold-600">حضر ${ar(p)} من ${ar(l.length)}</span></div>
-      ${l.map((x, i) => `<div class="flex items-center gap-3 px-3 py-3 border-t border-slate-100 ${x.rec ? '' : 'bg-rose-50/40'}"><span class="w-8 h-8 shrink-0 rounded-full bg-slate-100 text-ink-800 text-sm font-extrabold flex items-center justify-center">${ar(i + 1)}</span><div class="min-w-0 flex-1"><div class="text-sm font-bold text-ink-900">${esc(x.s.sessionDate)}</div>${x.s.doctor ? `<div class="text-[11px] font-semibold text-slate-500">${esc(dr(x.s.doctor))}</div>` : ''}</div>${x.rec ? '<span title="حضر" class="shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>' : '<span title="غاب" class="shrink-0 w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>'}</div>`).join('')}</div>`;
+      ${l.map((x, i) => `<div class="flex items-center gap-3 px-3 py-3 border-t border-slate-100 ${x.rec ? '' : 'bg-rose-50/40'}"><span class="w-8 h-8 shrink-0 rounded-full bg-slate-100 text-ink-800 text-sm font-extrabold flex items-center justify-center">${ar(i + 1)}</span><div class="min-w-0 flex-1"><div class="text-sm font-bold text-ink-900">${esc(x.s.sessionDate)}</div>${x.s.doctor ? `<div class="text-[11px] font-semibold text-slate-500">${esc(dr(x.s.doctor))}</div>` : ''}</div>${x.rec ? '<span title="حضر" class="shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>' : '<span title="محضرش" class="shrink-0 w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>'}</div>`).join('')}</div>`;
   });
   return h;
 }
