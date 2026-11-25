@@ -81,6 +81,19 @@ const dOnly = s => String(s || '').split(' - ')[0];
 const cleanSession = s => s ? { ...s, sessionDate: dOnly(s.sessionDate) } : s;
 
 const getAdminKey = () => { try { return localStorage.getItem('att_admin_key_y4') || ''; } catch { return ''; } };
+
+function askPass(msg) {
+  return new Promise(resolve => {
+    const g = $('pw-gate'), inp = $('pw-input'), ok = $('pw-ok'), er = $('pw-err');
+    $('pw-emblem').innerHTML = icon('cap', 'w-10 h-10');
+    inp.value = ''; er.textContent = msg || ''; er.classList.toggle('hidden', !msg);
+    g.classList.remove('hidden'); setTimeout(() => inp.focus(), 50);
+    const done = v => { g.classList.add('hidden'); ok.removeEventListener('click', onOk); inp.removeEventListener('keydown', onKey); resolve(v); };
+    const onOk = () => { const v = inp.value.trim(); if (v) done(v); };
+    const onKey = e => { if (e.key === 'Enter') onOk(); };
+    ok.addEventListener('click', onOk); inp.addEventListener('keydown', onKey);
+  });
+}
 async function api(body, ms = 40000, retried = false) {
   if (isAdminMode) { const k = getAdminKey(); if (k) body = { ...body, adminKey: k }; }
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
@@ -88,9 +101,9 @@ async function api(body, ms = 40000, retried = false) {
     const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), signal: ctl.signal });
     const j = await r.json();
     if (!j.ok) {
-      if (j.error === 'unauthorized' && isAdminMode && !retried) {
-        const k = prompt('أدخل كلمة سر لوحة التحكم');
-        if (k) { try { localStorage.setItem('att_admin_key_y4', k.trim()); } catch {} clearTimeout(t); return api(body, ms, true); }
+      if (j.error === 'unauthorized' && isAdminMode && (retried || 0) < 3) {
+        const k = await askPass(retried ? 'كلمة السر غلط، حاول تاني' : '');
+        if (k) { try { localStorage.setItem('att_admin_key_y4', k.trim()); } catch {} clearTimeout(t); return api(body, ms, (retried || 0) + 1); }
       }
       throw new Error(j.error || 'api_error');
     }
