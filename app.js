@@ -588,7 +588,7 @@ function renderRoster() {
   if (!rows.length) { body.innerHTML = '<div class="py-12 text-center text-slate-400 font-bold">مفيش نتائج</div>'; return; }
   body.innerHTML = rows.map(x => `<div class="flex items-center gap-2 px-3 py-2.5 ${x.rec ? 'bg-gold-200/20' : ''}">
     <span class="w-9 text-center text-xs font-extrabold text-slate-400">${x.no}</span>
-    <span class="flex-1 font-bold leading-6 ${x.rec ? 'text-ink-900' : 'text-slate-500'}">${esc(x.name)}${x.extra ? ' <span class="text-[10px] text-gold-600">(يدوي)</span>' : ''}</span>
+    <span data-student="${esc(x.name)}" class="flex-1 font-bold leading-6 cursor-pointer underline decoration-dotted decoration-gold-500/60 underline-offset-4 ${x.rec ? 'text-ink-900' : 'text-slate-500'}">${esc(x.name)}${x.extra ? ' <span class="text-[10px] text-gold-600">(يدوي)</span>' : ''}</span>
     <span class="w-12 flex justify-center">${x.rec ? `<span class="inline-flex w-7 h-7 items-center justify-center rounded-full bg-ink-900 text-gold-300">${icon('check')}</span>` : '<span class="text-slate-300">—</span>'}</span>
     <span class="hidden sm:block w-20 text-center text-[11px] font-semibold text-slate-500">${x.rec ? fmtTime(x.rec.timestamp) : ''}</span>
     <span class="w-14 text-center">${x.rec ? `<button data-del-rec="${esc(x.rec.id)}" class="text-rose-500 text-xs font-bold px-1.5 py-1 rounded-lg hover:bg-rose-50">حذف</button>`
@@ -619,6 +619,80 @@ async function loadAdminData() {
   sessionsList = j.sessions.map(cleanSession); counts = j.counts || {}; records = j.records;
   renderAdminView();
 }
+
+const stuCache = new Map();
+let stuToken = 0;
+function ensureStuModal() {
+  let m = document.getElementById('stu-modal'); if (m) return m;
+  m = document.createElement('div'); m.id = 'stu-modal'; m.className = 'modal hidden';
+  m.innerHTML = `<div class="box max-w-lg" style="max-height:88vh;overflow:auto">
+    <div class="flex items-start justify-between gap-3 mb-3"><div class="min-w-0"><p class="text-[11px] font-bold text-gold-600 tracking-widest">تقرير الطالب</p><h3 id="stu-name" class="font-display font-bold text-2xl text-ink-900 leading-8"></h3></div>
+    <button id="stu-close" class="shrink-0 w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">${icon('x')}</button></div>
+    <div id="stu-body"></div></div>`;
+  document.body.appendChild(m);
+  const close = () => { m.classList.add('hidden'); stuToken++; };
+  m.querySelector('#stu-close').addEventListener('click', close);
+  m.addEventListener('click', e => { if (e.target === m) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  return m;
+}
+async function stuRecords(sid) {
+  const c = stuCache.get(sid);
+  if (c && Date.now() - c.t < 45000) return c.r;
+  const r = (await api({ action: 'adminList', sid })).records || [];
+  stuCache.set(sid, { t: Date.now(), r }); return r;
+}
+async function openStudentReport(name) {
+  const m = ensureStuModal(), body = m.querySelector('#stu-body'), my = ++stuToken;
+  m.querySelector('#stu-name').textContent = name;
+  m.classList.remove('hidden');
+  const list = [...sessionsList].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+  if (!list.length) { body.innerHTML = '<div class="py-10 text-center text-slate-400 font-bold">لا توجد محاضرات بعد</div>'; return; }
+  stuCache.delete(selectedAdminSessionId);
+  const me = normName(name), got = new Map();
+  let done = 0;
+  const prog = () => { body.innerHTML = `<div class="py-10 text-center text-slate-500 font-bold">جاري تجميع الحضور... ${done}/${list.length}</div>`; };
+  prog();
+  const queue = [...list];
+  const worker = async () => {
+    while (queue.length) {
+      const s = queue.shift();
+      try { got.set(s.id, await stuRecords(s.id)); } catch { got.set(s.id, null); }
+      done++; if (my === stuToken) prog();
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (my !== stuToken) return;
+  const failed = list.filter(s => got.get(s.id) === null).length;
+  const byCourse = new Map();
+  list.forEach(s => {
+    const rs = got.get(s.id), rec = rs ? rs.find(r => normName(r.studentName) === me) : null;
+    if (!byCourse.has(s.courseName)) byCourse.set(s.courseName, []);
+    byCourse.get(s.courseName).push({ s, rec, unknown: rs === null });
+  });
+  let tp = 0, tt = 0;
+  byCourse.forEach(l => l.forEach(x => { if (!x.unknown) { tt++; if (x.rec) tp++; } }));
+  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+  const chip = x => x.unknown ? '<span class="text-slate-400 text-xs font-bold">؟</span>'
+    : x.rec ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300">${icon('check', 'w-3.5 h-3.5')}حضر</span>`
+    : '<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-600">غاب</span>';
+  let h = `<div class="grid grid-cols-3 gap-2 text-center mb-2">
+    <div class="rounded-2xl bg-ink-900 py-3"><div class="text-2xl font-extrabold text-gold-300">${tp}</div><div class="text-[11px] font-bold text-white/70">حضر</div></div>
+    <div class="rounded-2xl bg-slate-50 border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${tt - tp}</div><div class="text-[11px] font-bold text-slate-500">غاب</div></div>
+    <div class="rounded-2xl bg-slate-50 border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${pct(tp, tt)}%</div><div class="text-[11px] font-bold text-slate-500">نسبة الحضور</div></div></div>`;
+  if (failed) h += `<p class="text-xs font-bold text-rose-500 mb-2">تعذر تحميل ${failed} محاضرة، حاول تاني.</p>`;
+  byCourse.forEach((l, course) => {
+    const p = l.filter(x => x.rec).length, t = l.filter(x => !x.unknown).length;
+    h += `<div class="mt-4 rounded-2xl border border-slate-200 overflow-hidden">
+      <div class="flex items-center justify-between gap-2 px-3 py-2.5 bg-slate-50"><span class="font-display font-bold text-ink-900">${esc(course)}</span><span class="text-xs font-extrabold text-gold-600">${p}/${t} · ${pct(p, t)}%</span></div>
+      ${l.map(x => `<div class="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-slate-100 ${x.rec ? 'bg-gold-200/20' : ''}">
+        <div class="min-w-0"><div class="text-sm font-bold text-ink-900">${esc(x.s.sessionDate)}</div>${x.s.doctor ? `<div class="text-[11px] font-semibold text-slate-500">${esc(dr(x.s.doctor))}</div>` : ''}</div>${chip(x)}</div>`).join('')}</div>`;
+  });
+  body.innerHTML = h;
+}
+document.getElementById('attendance-table-body').addEventListener('click', e => {
+  const el = e.target.closest('[data-student]'); if (el) openStudentReport(el.dataset.student);
+});
 
 $('copy-student-link-header-btn').addEventListener('click', () => { if (selectedAdminSessionId) copyText(studentUrl(selectedAdminSessionId), 'تم نسخ رابط الطلاب'); });
 $('admin-search-input').addEventListener('input', renderRoster);
