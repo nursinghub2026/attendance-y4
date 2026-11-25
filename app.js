@@ -77,7 +77,11 @@ async function loadCourses() {
 }
 
 // التاريخ فقط (بنشيل الوقت من المحاضرات القديمة)
-const dOnly = s => String(s || '').split(' - ')[0];
+const dOnly = s => {
+  const v = String(s || '').split(' - ')[0].trim(), m = /^(\d{4}-\d{2}-\d{2})(T.*)?$/.exec(v);
+  if (m) { let iso = m[1]; if (m[2]) { try { iso = new Date(v).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }); } catch {} } if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return buildSessionDate(iso); }
+  return v;
+};
 const cleanSession = s => s ? { ...s, sessionDate: dOnly(s.sessionDate) } : s;
 
 const getAdminKey = () => { try { return localStorage.getItem('att_admin_key_y4') || ''; } catch { return ''; } };
@@ -615,7 +619,7 @@ const _pgRav = renderAdminView;
 renderAdminView = function () { _pgRav(); clearTimeout(PGX.syncT); PGX.syncT = setTimeout(pgSync, PGX.open ? 50 : 1800); };
 
 const pgCss = document.createElement('style');
-pgCss.textContent = '@keyframes pgin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}#pgx .pgv{animation:pgin .18s ease-out}#pgx .pgrow{transition:background .15s}#pgx .pgrow:active{background:rgba(201,165,92,.18)}@keyframes pgsp{to{transform:rotate(360deg)}}.pgsp{animation:pgsp .8s linear infinite}@media(max-width:639px){#admin-mode-wrapper header .btn.ring-1{width:2.6rem;padding-left:0;padding-right:0;flex:0 0 auto}#open-create-session-btn{min-width:6.5rem}}';
+pgCss.textContent = '@keyframes pgin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}#pgx .pgv{animation:pgin .18s ease-out}#pgx .pgrow{transition:background .15s}#pgx .pgrow:active{background:rgba(201,165,92,.18)}@keyframes pgsp{to{transform:rotate(360deg)}}.pgsp{animation:pgsp .8s linear infinite}';
 document.head.appendChild(pgCss);
 const FOLDER_SVG = '<svg viewBox="0 0 24 24" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const CHEV = '<svg viewBox="0 0 24 24" class="w-5 h-5 text-slate-300 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>';
@@ -768,19 +772,16 @@ function pgStudent(name) {
     <div class="rounded-2xl bg-white border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${tt - tp}</div><div class="text-[11px] font-bold text-slate-500">غاب</div></div>
     <div class="rounded-2xl bg-white border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${pgPct(tp, tt)}%</div><div class="text-[11px] font-bold text-slate-500">نسبة الحضور</div></div></div>`;
   if (!tt && !missing) h += '<div class="card p-10 text-center text-slate-400 font-bold">لا توجد محاضرات بعد</div>';
+  const ar = n => Number(n).toLocaleString('ar-EG');
   by.forEach((l, course) => {
     const p = l.filter(x => x.rec).length;
-    h += `<div class="mt-4 rounded-2xl border border-slate-200 bg-white overflow-hidden"><div class="flex items-center justify-between gap-2 px-3 py-2.5 bg-slate-50"><span class="font-display font-bold text-ink-900">${esc(course)}</span><span class="text-xs font-extrabold text-gold-600">${p}/${l.length} · ${pgPct(p, l.length)}%</span></div>
-      ${l.map(x => `<div class="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-slate-100 ${x.rec ? 'bg-gold-200/20' : ''}"><div class="min-w-0"><div class="text-sm font-bold text-ink-900">${esc(x.s.sessionDate)}</div>${x.s.doctor ? `<div class="text-[11px] font-semibold text-slate-500">${esc(dr(x.s.doctor))}</div>` : ''}</div>${x.rec ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300">${icon('check', 'w-3.5 h-3.5')}حضر</span>` : '<span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-600">غاب</span>'}</div>`).join('')}</div>`;
+    h += `<div class="mt-4 rounded-2xl border border-slate-200 bg-white overflow-hidden"><div class="flex items-center justify-between gap-2 px-3 py-3 bg-slate-50"><span class="font-display font-bold text-ink-900">${esc(course)}</span><span class="text-xs font-extrabold text-gold-600">حضر ${ar(p)} من ${ar(l.length)}</span></div>
+      ${l.map((x, i) => `<div class="flex items-center gap-3 px-3 py-3 border-t border-slate-100 ${x.rec ? '' : 'bg-rose-50/40'}"><span class="w-8 h-8 shrink-0 rounded-full bg-slate-100 text-ink-800 text-sm font-extrabold flex items-center justify-center">${ar(i + 1)}</span><div class="min-w-0 flex-1"><div class="text-sm font-bold text-ink-900">${esc(x.s.sessionDate)}</div>${x.s.doctor ? `<div class="text-[11px] font-semibold text-slate-500">${esc(dr(x.s.doctor))}</div>` : ''}</div>${x.rec ? '<span title="حضر" class="shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>' : '<span title="غاب" class="shrink-0 w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>'}</div>`).join('')}</div>`;
   });
   return h;
 }
-(function addPgButtons() {
-  const ref = $('courses-btn'); if (!ref) return;
-  const mk = (id, label, svg, t) => { const b = document.createElement('button'); b.id = id; b.title = label; b.className = ref.className; b.innerHTML = svg + `<span class="hidden sm:inline">${label}</span>`; b.addEventListener('click', () => pgOpen(t)); ref.parentNode.insertBefore(b, ref); };
-  mk('pg-folders-btn', 'الفولدرات', FOLDER_SVG, 'folders');
-  mk('pg-students-btn', 'الطلاب', '<svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>', 'students');
-})();
+$('pg-folders-btn').addEventListener('click', () => pgOpen('folders'));
+$('pg-students-btn').addEventListener('click', () => pgOpen('students'));
 
 $('copy-student-link-header-btn').addEventListener('click', () => { if (selectedAdminSessionId) copyText(studentUrl(selectedAdminSessionId), 'تم نسخ رابط الطلاب'); });
 $('admin-search-input').addEventListener('input', renderRoster);
