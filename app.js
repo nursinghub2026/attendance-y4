@@ -1215,3 +1215,19 @@ async function bootstrapApp() {
   } catch (err) { console.error(err); fatal(err.message); }
 }
 bootstrapApp();
+
+/* hdr-collapse: slim sticky header on scroll (phone only, UI only) */
+(function () {
+  const h = document.querySelector('header.sticky'); if (!h) return;
+  const st = document.createElement('style');
+  st.textContent = '@media(max-width:639px){#hdr-ph{display:block}header.hc-fx{position:fixed!important;top:0;left:0;right:0;z-index:30;transition:box-shadow .25s}header.hc-fx>div{transition:padding .25s ease}header.hc-fx.hc>div{padding-top:6px!important;padding-bottom:6px!important;flex-direction:row!important;align-items:center!important;gap:6px!important}header.hc-fx.hc>div>div:first-child{flex:0 0 auto;min-width:0}header.hc-fx.hc h1,header.hc-fx.hc p{display:none}header.hc-fx.hc [data-theme-toggle]{display:none!important}header.hc-fx.hc>div>div:last-child [data-theme-toggle]{display:inline-flex!important;padding:8px 9px!important}header.hc-fx.hc>div>div:first-child>div:first-child{width:34px!important;height:34px!important}header.hc-fx.hc>div>div:last-child{flex:1 1 auto;flex-direction:row!important;gap:6px!important;align-items:center}header.hc-fx.hc .grid{display:flex!important;gap:4px!important}header.hc-fx.hc .grid .btn{flex-direction:row!important;padding:8px 9px!important;min-width:0}header.hc-fx.hc .grid .btn span{display:none}header.hc-fx.hc #open-create-session-btn{font-size:0!important;padding:8px 10px!important;flex:0 0 auto!important;margin-inline-start:auto;gap:0!important}header.hc-fx.hc #open-create-session-btn svg{width:20px;height:20px}header.hc-fx.hc{box-shadow:0 4px 14px rgba(0,0,0,.35)}}@media(min-width:640px){#hdr-ph{display:none}}';
+  document.head.appendChild(st);
+  const ph = document.createElement('div'); ph.id = 'hdr-ph';
+  h.parentNode.insertBefore(ph, h); h.classList.add('hc-fx');
+  const meas = () => { if (!h.classList.contains('hc') && h.offsetHeight) ph.style.height = h.offsetHeight + 'px'; };
+  meas(); window.addEventListener('resize', meas);
+  if (window.ResizeObserver) new ResizeObserver(meas).observe(h);
+  let tick = false;
+  const upd = () => { tick = false; const y = window.scrollY || document.documentElement.scrollTop || 0; const c = h.classList.contains('hc'); if (!c && y > 70) h.classList.add('hc'); else if (c && y < 12) { h.classList.remove('hc'); } };
+  window.addEventListener('scroll', () => { if (!tick) { tick = true; requestAnimationFrame(upd); } }, { passive: true });
+})();
