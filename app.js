@@ -484,7 +484,42 @@ function renderAdminView() {
   renderRoster();
 }
 
+let openFolder = null;
+const FOLDER_SVG = '<svg viewBox="0 0 24 24" class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 function renderSessionsGrid(sorted) {
+  const grid = $('sessions-grid'), head = grid.previousElementSibling, rosterSec = $('roster-session-title').closest('section');
+  if (!sorted.length) { head.textContent = 'المحاضرات'; rosterSec.classList.remove('hidden'); renderSessionCards(sorted); return; }
+  const sel = sorted.find(s => s.id === selectedAdminSessionId);
+  if (openFolder && sel && sel.courseName !== openFolder) openFolder = sel.courseName;
+  if (openFolder && !sorted.some(s => s.courseName === openFolder)) openFolder = null;
+  if (openFolder) {
+    head.innerHTML = `<button id="folder-back" class="btn-out text-xs mb-2">→ كل المواد</button><div class="flex items-center gap-2"><span class="text-gold-600">${FOLDER_SVG}</span><span>${esc(openFolder)}</span></div>`;
+    rosterSec.classList.remove('hidden');
+    renderSessionCards(sorted.filter(s => s.courseName === openFolder));
+    $('folder-back').addEventListener('click', () => { openFolder = null; renderAdminView(); window.scrollTo({ top: 0 }); });
+    return;
+  }
+  head.textContent = 'المواد';
+  rosterSec.classList.add('hidden');
+  const groups = new Map();
+  sorted.forEach(s => { if (!groups.has(s.courseName)) groups.set(s.courseName, []); groups.get(s.courseName).push(s); });
+  grid.innerHTML = [...groups.entries()].map(([name, list]) => {
+    const present = list.reduce((t, s) => t + (counts[s.id] || 0), 0), live = list.some(s => s.isOpen);
+    return `<div data-folder="${esc(name)}" class="cursor-pointer rounded-3xl p-4 border-2 border-transparent hover:border-gold-300 bg-white shadow-sm transition flex items-center gap-3">
+      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-ink-900 to-ink-700 text-gold-300 flex items-center justify-center shrink-0">${FOLDER_SVG}</div>
+      <div class="flex-1 min-w-0"><h3 class="font-display font-bold text-lg text-ink-900 leading-6">${esc(name)}</h3>
+        <div class="text-xs font-bold text-slate-500 mt-1">${list.length} محاضرة · ${present} حضور</div></div>
+      ${live ? '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300 shrink-0"><i class="live w-1.5 h-1.5 rounded-full bg-gold-400"></i>مفتوح</span>' : ''}
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('[data-folder]').forEach(c => c.addEventListener('click', async () => {
+    openFolder = c.dataset.folder;
+    selectedAdminSessionId = groups.get(openFolder)[0].id;
+    await loadAdminData(); window.scrollTo({ top: 0 });
+  }));
+}
+
+function renderSessionCards(sorted) {
   const grid = $('sessions-grid');
   if (!sorted.length) { grid.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm card">لا توجد محاضرات بعد. اضغط "محاضرة" للبدء.</div>'; return; }
   grid.innerHTML = sorted.map(s => {
