@@ -484,42 +484,7 @@ function renderAdminView() {
   renderRoster();
 }
 
-let openFolder = null;
-const FOLDER_SVG = '<svg viewBox="0 0 24 24" class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 function renderSessionsGrid(sorted) {
-  const grid = $('sessions-grid'), head = grid.previousElementSibling, rosterSec = $('roster-session-title').closest('section');
-  if (!sorted.length) { head.textContent = 'المحاضرات'; rosterSec.classList.remove('hidden'); renderSessionCards(sorted); return; }
-  const sel = sorted.find(s => s.id === selectedAdminSessionId);
-  if (openFolder && sel && sel.courseName !== openFolder) openFolder = sel.courseName;
-  if (openFolder && !sorted.some(s => s.courseName === openFolder)) openFolder = null;
-  if (openFolder) {
-    head.innerHTML = `<button id="folder-back" class="btn-out text-xs mb-2">→ كل المواد</button><div class="flex items-center gap-2"><span class="text-gold-600">${FOLDER_SVG}</span><span>${esc(openFolder)}</span></div>`;
-    rosterSec.classList.remove('hidden');
-    renderSessionCards(sorted.filter(s => s.courseName === openFolder));
-    $('folder-back').addEventListener('click', () => { openFolder = null; renderAdminView(); window.scrollTo({ top: 0 }); });
-    return;
-  }
-  head.textContent = 'المواد';
-  rosterSec.classList.add('hidden');
-  const groups = new Map();
-  sorted.forEach(s => { if (!groups.has(s.courseName)) groups.set(s.courseName, []); groups.get(s.courseName).push(s); });
-  grid.innerHTML = [...groups.entries()].map(([name, list]) => {
-    const present = list.reduce((t, s) => t + (counts[s.id] || 0), 0), live = list.some(s => s.isOpen);
-    return `<div data-folder="${esc(name)}" class="cursor-pointer rounded-3xl p-4 border-2 border-transparent hover:border-gold-300 bg-white shadow-sm transition flex items-center gap-3">
-      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-ink-900 to-ink-700 text-gold-300 flex items-center justify-center shrink-0">${FOLDER_SVG}</div>
-      <div class="flex-1 min-w-0"><h3 class="font-display font-bold text-lg text-ink-900 leading-6">${esc(name)}</h3>
-        <div class="text-xs font-bold text-slate-500 mt-1">${list.length} محاضرة · ${present} حضور</div></div>
-      ${live ? '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300 shrink-0"><i class="live w-1.5 h-1.5 rounded-full bg-gold-400"></i>مفتوح</span>' : ''}
-    </div>`;
-  }).join('');
-  grid.querySelectorAll('[data-folder]').forEach(c => c.addEventListener('click', async () => {
-    openFolder = c.dataset.folder;
-    selectedAdminSessionId = groups.get(openFolder)[0].id;
-    await loadAdminData(); window.scrollTo({ top: 0 });
-  }));
-}
-
-function renderSessionCards(sorted) {
   const grid = $('sessions-grid');
   if (!sorted.length) { grid.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400 text-sm card">لا توجد محاضرات بعد. اضغط "محاضرة" للبدء.</div>'; return; }
   grid.innerHTML = sorted.map(s => {
@@ -588,7 +553,7 @@ function renderRoster() {
   if (!rows.length) { body.innerHTML = '<div class="py-12 text-center text-slate-400 font-bold">مفيش نتائج</div>'; return; }
   body.innerHTML = rows.map(x => `<div class="flex items-center gap-2 px-3 py-2.5 ${x.rec ? 'bg-gold-200/20' : ''}">
     <span class="w-9 text-center text-xs font-extrabold text-slate-400">${x.no}</span>
-    <span data-student="${esc(x.name)}" class="flex-1 font-bold leading-6 cursor-pointer underline decoration-dotted decoration-gold-500/60 underline-offset-4 ${x.rec ? 'text-ink-900' : 'text-slate-500'}">${esc(x.name)}${x.extra ? ' <span class="text-[10px] text-gold-600">(يدوي)</span>' : ''}</span>
+    <span class="flex-1 font-bold leading-6 ${x.rec ? 'text-ink-900' : 'text-slate-500'}">${esc(x.name)}${x.extra ? ' <span class="text-[10px] text-gold-600">(يدوي)</span>' : ''}</span>
     <span class="w-12 flex justify-center">${x.rec ? `<span class="inline-flex w-7 h-7 items-center justify-center rounded-full bg-ink-900 text-gold-300">${icon('check')}</span>` : '<span class="text-slate-300">—</span>'}</span>
     <span class="hidden sm:block w-20 text-center text-[11px] font-semibold text-slate-500">${x.rec ? fmtTime(x.rec.timestamp) : ''}</span>
     <span class="w-14 text-center">${x.rec ? `<button data-del-rec="${esc(x.rec.id)}" class="text-rose-500 text-xs font-bold px-1.5 py-1 rounded-lg hover:bg-rose-50">حذف</button>`
@@ -620,79 +585,202 @@ async function loadAdminData() {
   renderAdminView();
 }
 
-const stuCache = new Map();
-let stuToken = 0;
-function ensureStuModal() {
-  let m = document.getElementById('stu-modal'); if (m) return m;
-  m = document.createElement('div'); m.id = 'stu-modal'; m.className = 'modal hidden';
-  m.innerHTML = `<div class="box max-w-lg" style="max-height:88vh;overflow:auto">
-    <div class="flex items-start justify-between gap-3 mb-3"><div class="min-w-0"><p class="text-[11px] font-bold text-gold-600 tracking-widest">تقرير الطالب</p><h3 id="stu-name" class="font-display font-bold text-2xl text-ink-900 leading-8"></h3></div>
-    <button id="stu-close" class="shrink-0 w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">${icon('x')}</button></div>
-    <div id="stu-body"></div></div>`;
-  document.body.appendChild(m);
-  const close = () => { m.classList.add('hidden'); stuToken++; };
-  m.querySelector('#stu-close').addEventListener('click', close);
-  m.addEventListener('click', e => { if (e.target === m) close(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-  return m;
+/* PGX: صفحات المواد والطلاب (إضافة فقط) */
+const PGX = { cache: new Map(), ver: 0, busy: new Set(), failed: new Set(), stack: [], q: '', filt: 'all', timer: null, saveT: null };
+PGX.key = 'att_pgx_' + String(API_URL).slice(-14);
+try { const o = JSON.parse(localStorage.getItem(PGX.key) || '{}'); Object.keys(o).forEach(k => PGX.cache.set(k, o[k])); } catch {}
+const pgSave = () => { clearTimeout(PGX.saveT); PGX.saveT = setTimeout(() => { try { const o = {}; PGX.cache.forEach((v, k) => o[k] = v); localStorage.setItem(PGX.key, JSON.stringify(o)); } catch {} }, 800); };
+const pgPut = (sid, recs) => { PGX.cache.set(sid, { n: recs.length, r: recs.map(x => ({ id: x.id, name: x.studentName, ts: x.timestamp })) }); PGX.ver++; pgSave(); };
+const pgNotify = () => { if (PGX.timer || !PGX.open) return; PGX.timer = setTimeout(() => { PGX.timer = null; pgRender(true); }, 250); };
+function pgNeeds() {
+  const live = new Set(sessionsList.map(s => s.id));
+  PGX.cache.forEach((v, k) => { if (!live.has(k)) PGX.cache.delete(k); });
+  return sessionsList.filter(s => s.id !== selectedAdminSessionId && !PGX.busy.has(s.id) && (!PGX.cache.has(s.id) || PGX.cache.get(s.id).n !== (counts[s.id] || 0))).map(s => s.id);
 }
-async function stuRecords(sid) {
-  const c = stuCache.get(sid);
-  if (c && Date.now() - c.t < 45000) return c.r;
-  const r = (await api({ action: 'adminList', sid })).records || [];
-  stuCache.set(sid, { t: Date.now(), r }); return r;
-}
-async function openStudentReport(name) {
-  const m = ensureStuModal(), body = m.querySelector('#stu-body'), my = ++stuToken;
-  m.querySelector('#stu-name').textContent = name;
-  m.classList.remove('hidden');
-  const list = [...sessionsList].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
-  if (!list.length) { body.innerHTML = '<div class="py-10 text-center text-slate-400 font-bold">لا توجد محاضرات بعد</div>'; return; }
-  stuCache.delete(selectedAdminSessionId);
-  const me = normName(name), got = new Map();
-  let done = 0;
-  const prog = () => { body.innerHTML = `<div class="py-10 text-center text-slate-500 font-bold">جاري تجميع الحضور... ${done}/${list.length}</div>`; };
-  prog();
-  const queue = [...list];
-  const worker = async () => {
-    while (queue.length) {
-      const s = queue.shift();
-      try { got.set(s.id, await stuRecords(s.id)); } catch { got.set(s.id, null); }
-      done++; if (my === stuToken) prog();
+async function pgSync() {
+  if (selectedAdminSessionId && records) { const c = PGX.cache.get(selectedAdminSessionId); if (!c || c.n !== records.length || c.r.some((x, i) => x.id !== (records[i] || {}).id)) { pgPut(selectedAdminSessionId, records); pgNotify(); } }
+  const q = pgNeeds();
+  const run = async () => {
+    while (q.length) {
+      const sid = q.shift(); if (PGX.busy.has(sid)) continue;
+      PGX.busy.add(sid);
+      try { const r = (await api({ action: 'adminList', sid })).records || []; pgPut(sid, r); PGX.failed.delete(sid); }
+      catch { PGX.failed.add(sid); }
+      PGX.busy.delete(sid); pgNotify();
     }
   };
-  await Promise.all([worker(), worker(), worker(), worker()]);
-  if (my !== stuToken) return;
-  const failed = list.filter(s => got.get(s.id) === null).length;
-  const byCourse = new Map();
-  list.forEach(s => {
-    const rs = got.get(s.id), rec = rs ? rs.find(r => normName(r.studentName) === me) : null;
-    if (!byCourse.has(s.courseName)) byCourse.set(s.courseName, []);
-    byCourse.get(s.courseName).push({ s, rec, unknown: rs === null });
-  });
-  let tp = 0, tt = 0;
-  byCourse.forEach(l => l.forEach(x => { if (!x.unknown) { tt++; if (x.rec) tp++; } }));
-  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
-  const chip = x => x.unknown ? '<span class="text-slate-400 text-xs font-bold">؟</span>'
-    : x.rec ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300">${icon('check', 'w-3.5 h-3.5')}حضر</span>`
-    : '<span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-600">غاب</span>';
-  let h = `<div class="grid grid-cols-3 gap-2 text-center mb-2">
-    <div class="rounded-2xl bg-ink-900 py-3"><div class="text-2xl font-extrabold text-gold-300">${tp}</div><div class="text-[11px] font-bold text-white/70">حضر</div></div>
-    <div class="rounded-2xl bg-slate-50 border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${tt - tp}</div><div class="text-[11px] font-bold text-slate-500">غاب</div></div>
-    <div class="rounded-2xl bg-slate-50 border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${pct(tp, tt)}%</div><div class="text-[11px] font-bold text-slate-500">نسبة الحضور</div></div></div>`;
-  if (failed) h += `<p class="text-xs font-bold text-rose-500 mb-2">تعذر تحميل ${failed} محاضرة، حاول تاني.</p>`;
-  byCourse.forEach((l, course) => {
-    const p = l.filter(x => x.rec).length, t = l.filter(x => !x.unknown).length;
-    h += `<div class="mt-4 rounded-2xl border border-slate-200 overflow-hidden">
-      <div class="flex items-center justify-between gap-2 px-3 py-2.5 bg-slate-50"><span class="font-display font-bold text-ink-900">${esc(course)}</span><span class="text-xs font-extrabold text-gold-600">${p}/${t} · ${pct(p, t)}%</span></div>
-      ${l.map(x => `<div class="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-slate-100 ${x.rec ? 'bg-gold-200/20' : ''}">
-        <div class="min-w-0"><div class="text-sm font-bold text-ink-900">${esc(x.s.sessionDate)}</div>${x.s.doctor ? `<div class="text-[11px] font-semibold text-slate-500">${esc(dr(x.s.doctor))}</div>` : ''}</div>${chip(x)}</div>`).join('')}</div>`;
-  });
-  body.innerHTML = h;
+  await Promise.all([run(), run()]);
 }
-document.getElementById('attendance-table-body').addEventListener('click', e => {
-  const el = e.target.closest('[data-student]'); if (el) openStudentReport(el.dataset.student);
-});
+const _pgRav = renderAdminView;
+renderAdminView = function () { _pgRav(); clearTimeout(PGX.syncT); PGX.syncT = setTimeout(pgSync, PGX.open ? 50 : 1800); };
+
+const pgCss = document.createElement('style');
+pgCss.textContent = '@keyframes pgin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}#pgx .pgv{animation:pgin .18s ease-out}#pgx .pgrow{transition:background .15s}#pgx .pgrow:active{background:rgba(201,165,92,.18)}@keyframes pgsp{to{transform:rotate(360deg)}}.pgsp{animation:pgsp .8s linear infinite}@media(max-width:639px){#admin-mode-wrapper header .btn.ring-1{width:2.6rem;padding-left:0;padding-right:0;flex:0 0 auto}#open-create-session-btn{min-width:6.5rem}}';
+document.head.appendChild(pgCss);
+const FOLDER_SVG = '<svg viewBox="0 0 24 24" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const CHEV = '<svg viewBox="0 0 24 24" class="w-5 h-5 text-slate-300 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>';
+const BACK = '<svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+const pgByDate = (a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0);
+const pgPct = (a, b) => b ? Math.round(a / b * 100) : 0;
+const pgCovered = () => sessionsList.filter(s => PGX.cache.has(s.id)).length;
+
+function pgIndex() {
+  if (PGX.idx && PGX.idx.ver === PGX.ver && PGX.idx.n === sessionsList.length) return PGX.idx;
+  const by = new Map();
+  sessionsList.forEach(s => { const c = PGX.cache.get(s.id); if (!c) return; c.r.forEach(r => { const k = normName(r.name); if (!by.has(k)) by.set(k, new Map()); by.get(k).set(s.id, r); }); });
+  return PGX.idx = { ver: PGX.ver, n: sessionsList.length, by };
+}
+function pgBar() {
+  const tot = sessionsList.length, got = pgCovered();
+  if (got >= tot) return '';
+  return `<div class="mb-3 rounded-2xl bg-white border border-slate-200 px-3 py-2.5"><div class="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1.5"><span class="flex items-center gap-1.5"><svg class="pgsp w-3.5 h-3.5 text-gold-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>جاري تجميع البيانات</span><span>${got}/${tot}</span></div><div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-gold-500" style="width:${pgPct(got, tot)}%"></div></div></div>`;
+}
+function ensurePg() {
+  let el = document.getElementById('pgx'); if (el) return el;
+  el = document.createElement('div'); el.id = 'pgx'; el.className = 'hidden fixed inset-0 overflow-y-auto'; el.style.zIndex = '45';
+  el.innerHTML = `<div class="sticky top-0 z-10 bg-ink-950/95 backdrop-blur border-b border-gold-500/30"><div class="max-w-5xl mx-auto px-3 py-2.5 flex items-center gap-2">
+    <button id="pgx-back" class="w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 text-white flex items-center justify-center shrink-0">${BACK}</button>
+    <div class="min-w-0 flex-1"><div id="pgx-sub" class="text-[10px] font-bold text-gold-400 tracking-widest"></div><h2 id="pgx-title" class="font-display font-bold text-lg text-white leading-6 truncate"></h2></div>
+    <button id="pgx-refresh" class="px-3 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 text-white text-xs font-bold shrink-0">تحديث</button></div></div>
+    <div class="max-w-5xl mx-auto px-4 py-4"><div id="pgx-body" class="pgv"></div></div>`;
+  document.body.appendChild(el);
+  el.querySelector('#pgx-back').addEventListener('click', () => history.back());
+  el.querySelector('#pgx-refresh').addEventListener('click', async () => {
+    const b = el.querySelector('#pgx-refresh'); b.textContent = '...';
+    try { PGX.cache.forEach(v => { v.n = -1; }); await loadAdminData(); } catch {}
+    b.textContent = 'تحديث'; pgSync();
+  });
+  el.addEventListener('click', e => {
+    const t = e.target.closest('[data-go]'); if (!t) return;
+    pgPush({ t: t.dataset.go, a: t.dataset.a || '' });
+  });
+  window.addEventListener('popstate', () => {
+    if (!PGX.open) return;
+    PGX.stack.pop();
+    if (!PGX.stack.length) { PGX.open = false; el.classList.add('hidden'); document.documentElement.style.overflow = ''; return; }
+    pgRender(false);
+  });
+  return el;
+}
+function pgOpen(t) {
+  const el = ensurePg();
+  el.style.background = getComputedStyle(document.body).backgroundColor;
+  PGX.open = true; PGX.stack = [{ t, a: '' }]; PGX.q = ''; PGX.filt = 'all';
+  el.classList.remove('hidden'); document.documentElement.style.overflow = 'hidden';
+  history.pushState({ pgx: 1 }, '');
+  pgRender(false); clearTimeout(PGX.syncT); PGX.syncT = setTimeout(pgSync, 30);
+}
+function pgPush(v) { PGX.stack.push(v); PGX.q = ''; PGX.filt = 'all'; history.pushState({ pgx: PGX.stack.length }, ''); pgRender(false); }
+
+function pgRender(keep) {
+  const el = document.getElementById('pgx'); if (!el || !PGX.open) return;
+  const v = PGX.stack[PGX.stack.length - 1], body = el.querySelector('#pgx-body');
+  if (keep && v.t === 'students' && document.activeElement && document.activeElement.id === 'pgx-q') { pgStudentsList(); return; }
+  const scroll = keep ? el.scrollTop : 0;
+  let html = '', title = '', sub = '';
+  if (v.t === 'folders') [title, sub, html] = ['المواد', 'فولدرات المحاضرات', pgFolders()];
+  else if (v.t === 'folder') [title, sub, html] = [v.a, 'محاضرات المادة', pgFolder(v.a)];
+  else if (v.t === 'lecture') { const s = findSession(v.a); [title, sub, html] = [s ? s.courseName : 'محاضرة', s ? s.sessionDate : '', pgLecture(v.a)]; }
+  else if (v.t === 'students') [title, sub, html] = ['الطلاب', 'تقرير حضور كل طالب', pgStudents()];
+  else if (v.t === 'student') [title, sub, html] = [v.a, 'تقرير الطالب', pgStudent(v.a)];
+  el.querySelector('#pgx-title').textContent = title; el.querySelector('#pgx-sub').textContent = sub;
+  body.className = keep ? '' : 'pgv'; body.innerHTML = html;
+  if (v.t === 'students') pgStudentsList();
+  if (v.t === 'lecture') { const q = body.querySelector('#pgx-lq'); if (q) q.addEventListener('input', () => { PGX.q = q.value; pgLectureList(v.a); }); body.querySelectorAll('[data-lf]').forEach(b => b.addEventListener('click', () => { PGX.filt = b.dataset.lf; pgRender(true); })); pgLectureList(v.a); }
+  if (v.t === 'students') { const q = body.querySelector('#pgx-q'); q.value = PGX.q; q.addEventListener('input', () => { clearTimeout(PGX.qt); PGX.qt = setTimeout(() => { PGX.q = q.value; pgStudentsList(); }, 120); }); }
+  el.scrollTop = scroll;
+}
+function pgFolders() {
+  if (!sessionsList.length) return '<div class="card p-10 text-center text-slate-400 font-bold">لا توجد محاضرات بعد</div>';
+  const g = new Map();
+  [...sessionsList].sort((a, b) => pgByDate(b, a)).forEach(s => { if (!g.has(s.courseName)) g.set(s.courseName, []); g.get(s.courseName).push(s); });
+  return '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">' + [...g.entries()].map(([n, l]) => {
+    const tot = l.reduce((t, s) => t + (counts[s.id] || 0), 0), live = l.some(s => s.isOpen);
+    return `<div data-go="folder" data-a="${esc(n)}" class="pgrow cursor-pointer rounded-3xl p-4 bg-white border border-slate-100 shadow-sm flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-ink-900 to-ink-700 text-gold-300 flex items-center justify-center shrink-0">${FOLDER_SVG}</div>
+      <div class="flex-1 min-w-0"><div class="font-display font-bold text-lg text-ink-900 leading-6">${esc(n)}</div><div class="text-xs font-bold text-slate-500 mt-0.5">${l.length} محاضرة · ${tot} حضور</div></div>
+      ${live ? '<span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300 shrink-0">مفتوح</span>' : ''}${CHEV}</div>`;
+  }).join('') + '</div>';
+}
+function pgFolder(name) {
+  const l = sessionsList.filter(s => s.courseName === name).sort((a, b) => pgByDate(b, a));
+  if (!l.length) return '<div class="card p-10 text-center text-slate-400 font-bold">المادة فاضية</div>';
+  const total = rosterList.length;
+  return '<div class="space-y-2.5">' + l.map(s => {
+    const c = counts[s.id] || 0;
+    return `<div data-go="lecture" data-a="${esc(s.id)}" class="pgrow cursor-pointer rounded-2xl p-3.5 bg-white border border-slate-100 shadow-sm flex items-center gap-3">
+      <div class="flex-1 min-w-0"><div class="font-extrabold text-ink-900">${esc(s.sessionDate)}</div>${s.doctor ? `<div class="text-xs font-bold text-gold-600 mt-0.5">${esc(dr(s.doctor))}</div>` : ''}</div>
+      ${s.isOpen ? '<span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300 shrink-0">مفتوح</span>' : ''}
+      <span class="font-extrabold bg-gold-200/40 text-ink-800 px-2.5 py-1 rounded-lg text-xs shrink-0">${c}${total ? '/' + total : ''} حاضر</span>${CHEV}</div>`;
+  }).join('') + '</div>';
+}
+function pgLecture(sid) {
+  const s = findSession(sid); if (!s) return '<div class="card p-10 text-center text-slate-400 font-bold">المحاضرة غير موجودة</div>';
+  const c = PGX.cache.get(sid);
+  if (!c) return '<div class="card p-10 text-center text-slate-500 font-bold"><svg class="pgsp w-6 h-6 mx-auto mb-3 text-gold-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>جاري تحميل كشف الحضور...</div>';
+  const pr = new Set(c.r.map(r => normName(r.name))), total = rosterList.length + c.r.filter(r => !rosterList.some(n => normName(n) === normName(r.name))).length;
+  const present = c.r.length, pct = pgPct(present, total || present);
+  const pill = (k, t) => `<button data-lf="${k}" class="${pillCls(PGX.filt === k)}">${t}</button>`;
+  return `<div class="card p-4 space-y-4"><div class="grid grid-cols-3 gap-2 text-center">
+    <div class="rounded-2xl bg-ink-900 py-3"><div class="text-2xl font-extrabold text-gold-300">${present}</div><div class="text-[11px] font-bold text-white/70">حاضر</div></div>
+    <div class="rounded-2xl bg-slate-50 border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${Math.max(total - present, 0)}</div><div class="text-[11px] font-bold text-slate-500">غائب</div></div>
+    <div class="rounded-2xl bg-slate-50 border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${pct}%</div><div class="text-[11px] font-bold text-slate-500">نسبة الحضور</div></div></div>
+    <div class="flex gap-2">${pill('all', 'الكل')}${pill('present', 'الحاضرين')}${pill('absent', 'الغايبين')}</div>
+    <input id="pgx-lq" type="search" autocomplete="off" placeholder="ابحث باسم الطالب..." class="inp">
+    <div id="pgx-ll" class="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100"></div></div>`;
+}
+function pgLectureList(sid) {
+  const box = document.getElementById('pgx-ll'), c = PGX.cache.get(sid); if (!box || !c) return;
+  const m = new Map(c.r.map(r => [normName(r.name), r]));
+  const rows = rosterList.map(n => ({ n, r: m.get(normName(n)) }));
+  const known = new Set(rosterList.map(normName));
+  c.r.forEach(r => { if (!known.has(normName(r.name))) rows.push({ n: r.name, r, extra: true }); });
+  const list = rows.map((x, i) => ({ ...x, i: i + 1 })).filter(x => (PGX.filt === 'all' || (PGX.filt === 'present') === !!x.r) && matchName(x.n, PGX.q));
+  box.innerHTML = list.length ? list.map(x => `<div class="flex items-center gap-2 px-3 py-2.5 ${x.r ? 'bg-gold-200/20' : ''}"><span class="w-8 text-center text-xs font-extrabold text-slate-400">${x.i}</span><span class="flex-1 font-bold ${x.r ? 'text-ink-900' : 'text-slate-500'}">${esc(x.n)}${x.extra ? ' <span class="text-[10px] text-gold-600">(يدوي)</span>' : ''}</span>${x.r ? `<span class="inline-flex w-7 h-7 items-center justify-center rounded-full bg-ink-900 text-gold-300">${icon('check')}</span>` : '<span class="text-xs font-extrabold text-rose-500">غاب</span>'}</div>`).join('') : '<div class="py-10 text-center text-slate-400 font-bold">مفيش نتائج</div>';
+}
+function pgStudents() {
+  if (!rosterList.length) return '<div class="card p-10 text-center text-slate-400 font-bold">كشف الأسماء فاضي. ارفع الأسماء من زرار "كشف الأسماء" الأول.</div>';
+  return `${pgBar()}<input id="pgx-q" type="search" autocomplete="off" placeholder="ابحث باسم الطالب..." class="inp mb-3"><div id="pgx-sl" class="rounded-2xl bg-white border border-slate-200 overflow-hidden divide-y divide-slate-100"></div>`;
+}
+function pgStudentsList() {
+  const box = document.getElementById('pgx-sl'); if (!box) return;
+  const idx = pgIndex().by, tot = pgCovered();
+  const bar = document.getElementById('pgx-body').firstElementChild;
+  if (bar && !bar.id && bar.tagName === 'DIV') { const nb = pgBar(); if (nb) bar.outerHTML = nb; else bar.remove(); }
+  const list = rosterList.map((n, i) => ({ n, i: i + 1 })).filter(x => matchName(x.n, PGX.q));
+  box.innerHTML = list.length ? list.map(x => {
+    const p = (idx.get(normName(x.n)) || new Map()).size, pc = pgPct(p, tot);
+    return `<div data-go="student" data-a="${esc(x.n)}" class="pgrow cursor-pointer flex items-center gap-2 px-3 py-3"><span class="w-8 text-center text-xs font-extrabold text-slate-400">${x.i}</span><span class="flex-1 font-bold text-ink-900 leading-6">${esc(x.n)}</span>${tot ? `<span class="text-xs font-extrabold ${pc >= 75 ? 'text-ink-800' : 'text-rose-500'}">${p}/${tot}</span>` : ''}${CHEV}</div>`;
+  }).join('') : '<div class="py-10 text-center text-slate-400 font-bold">مفيش نتائج</div>';
+}
+function pgStudent(name) {
+  const me = normName(name), idx = (pgIndex().by.get(me) || new Map());
+  const list = [...sessionsList].sort(pgByDate), by = new Map();
+  let tp = 0, tt = 0, missing = 0;
+  list.forEach(s => {
+    if (!PGX.cache.has(s.id)) { missing++; return; }
+    const rec = idx.get(s.id) || null; tt++; if (rec) tp++;
+    if (!by.has(s.courseName)) by.set(s.courseName, []); by.get(s.courseName).push({ s, rec });
+  });
+  let h = pgBar();
+  h += `<div class="grid grid-cols-3 gap-2 text-center mb-2">
+    <div class="rounded-2xl bg-ink-900 py-3"><div class="text-2xl font-extrabold text-gold-300">${tp}</div><div class="text-[11px] font-bold text-white/70">حضر</div></div>
+    <div class="rounded-2xl bg-white border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${tt - tp}</div><div class="text-[11px] font-bold text-slate-500">غاب</div></div>
+    <div class="rounded-2xl bg-white border border-slate-200 py-3"><div class="text-2xl font-extrabold text-ink-800">${pgPct(tp, tt)}%</div><div class="text-[11px] font-bold text-slate-500">نسبة الحضور</div></div></div>`;
+  if (!tt && !missing) h += '<div class="card p-10 text-center text-slate-400 font-bold">لا توجد محاضرات بعد</div>';
+  by.forEach((l, course) => {
+    const p = l.filter(x => x.rec).length;
+    h += `<div class="mt-4 rounded-2xl border border-slate-200 bg-white overflow-hidden"><div class="flex items-center justify-between gap-2 px-3 py-2.5 bg-slate-50"><span class="font-display font-bold text-ink-900">${esc(course)}</span><span class="text-xs font-extrabold text-gold-600">${p}/${l.length} · ${pgPct(p, l.length)}%</span></div>
+      ${l.map(x => `<div class="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-slate-100 ${x.rec ? 'bg-gold-200/20' : ''}"><div class="min-w-0"><div class="text-sm font-bold text-ink-900">${esc(x.s.sessionDate)}</div>${x.s.doctor ? `<div class="text-[11px] font-semibold text-slate-500">${esc(dr(x.s.doctor))}</div>` : ''}</div>${x.rec ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-ink-900 text-gold-300">${icon('check', 'w-3.5 h-3.5')}حضر</span>` : '<span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-600">غاب</span>'}</div>`).join('')}</div>`;
+  });
+  return h;
+}
+(function addPgButtons() {
+  const ref = $('courses-btn'); if (!ref) return;
+  const mk = (id, label, svg, t) => { const b = document.createElement('button'); b.id = id; b.title = label; b.className = ref.className; b.innerHTML = svg + `<span class="hidden sm:inline">${label}</span>`; b.addEventListener('click', () => pgOpen(t)); ref.parentNode.insertBefore(b, ref); };
+  mk('pg-folders-btn', 'الفولدرات', FOLDER_SVG, 'folders');
+  mk('pg-students-btn', 'الطلاب', '<svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>', 'students');
+})();
 
 $('copy-student-link-header-btn').addEventListener('click', () => { if (selectedAdminSessionId) copyText(studentUrl(selectedAdminSessionId), 'تم نسخ رابط الطلاب'); });
 $('admin-search-input').addEventListener('input', renderRoster);
